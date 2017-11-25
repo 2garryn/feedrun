@@ -35,9 +35,9 @@ object DatabaseConnect {
     query("USE " + keyspace)
   }
 
-  def query(str: String) = {
-    session.execute(str)
-  }
+  def query(str: String): ResultSet = session.execute(str)
+  def query(stat: Statement): ResultSet = session.execute(stat)
+
 
   def createTable(name: String, fields: Map[String, String], partKey: Seq[String], clusterKey: Seq[String], orderField: String, order: String = "DESC" ) = {
     val strFields = fields.foldLeft[String]("") {(acc: String,  kv: (String, String)) =>

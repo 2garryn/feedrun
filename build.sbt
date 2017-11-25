@@ -18,6 +18,8 @@ libraryDependencies ++= Seq(
   "com.datastax.cassandra" % "cassandra-driver-mapping" % "3.3.2",
   "com.datastax.cassandra" % "cassandra-driver-extras" % "3.3.2",
   "org.slf4j" % "slf4j-simple" % "1.7.21",
-  "com.github.nscala-time" %% "nscala-time" % "2.18.0"
+  "com.github.nscala-time" %% "nscala-time" % "2.18.0",
+  "commons-codec" % "commons-codec" % "1.10"
+
 
 )
