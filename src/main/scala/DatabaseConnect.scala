@@ -1,7 +1,11 @@
 import java.util.UUID
-
+import akka.{Done, NotUsed}
+import akka.stream.alpakka.cassandra.scaladsl.CassandraSink
+import akka.stream.scaladsl.Sink
 import com.datastax.driver.core._
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 object DatabaseConnect {
 
   val host = "localhost"
@@ -13,7 +17,7 @@ object DatabaseConnect {
         .setConnectionsPerHost(HostDistance.LOCAL,  4, 10)
         .setConnectionsPerHost(HostDistance.REMOTE, 2, 4)
 
-  val session = Cluster
+  implicit val session = Cluster
       .builder()
       .addContactPoint(host)
       .withPort(port)
@@ -86,8 +90,21 @@ object DatabaseConnect {
     }
 
     val query = "INSERT INTO " + name + " (" + fields + ") VALUES (" + cvals + ") " + strTtl + strTs + strIfNotExist + ";"
-    println(query)
 
     session.execute(query)
   }
+
+  def putActivitySinc[T](table: String, fields: List[String],  binder: (T, PreparedStatement) => BoundStatement): Sink[T, Future[Done]] = {
+    val st = insertPrepareStatement(table, fields)
+    val preparedStatement = session.prepare(st)
+    CassandraSink[T](parallelism = 2, preparedStatement, binder)
+  }
+
+
+  private def insertPrepareStatement(table: String, fields: List[String]): String = {
+    val placeholders = List.fill(fields.length)("?").mkString(",")
+    "INSERT INTO " + table + " (" + fields.mkString(",") + ") VALUES (" + placeholders+ ") IF NOT EXISTS"
+  }
+
+
 }

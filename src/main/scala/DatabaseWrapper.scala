@@ -1,17 +1,24 @@
 import java.util.UUID
 
-import com.datastax.driver.core.{ResultSet, Row}
+import akka.Done
+import akka.stream.scaladsl.Source
+import com.datastax.driver.core.{PreparedStatement, ResultSet, Row}
 import com.datastax.driver.core.querybuilder.{QueryBuilder, Select}
 import org.joda.time.DateTime
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
+import scala.util.Try
 
 
 object DatabaseWrapper {
   val keyspace = "mybase2"
   val activityTable = "activities"
+  val followTable = "follow"
   val startYear = 2015
+
+  implicit val system = GlobalActorSystem.getActorSystem
+  implicit val materializer = GlobalActorSystem.getMaterializer
 
   DatabaseConnect.initialize(keyspace)
   createTables()
@@ -19,6 +26,7 @@ object DatabaseWrapper {
 
   def createTables() = {
     createActivityTable(activityTable)
+    createFollowTable(followTable)
   }
 
 
@@ -40,15 +48,38 @@ object DatabaseWrapper {
     DatabaseConnect.createTable(activityTable, fields, partKey, clusterKey, "cluster_key", "desc")
   }
 
+  def createFollowTable(followTable: String) = {
+    val fields = Map(
+      "username" -> "text",
+      "follow_type" -> "text",
+      "actor" -> "text"
+    )
+    val partKey = Seq("username", "follow_type")
+    val clusterKey = Seq("actor")
+    DatabaseConnect.createTable(followTable, fields, partKey, clusterKey, "actor", "asc")
+  }
+
+  def putFollow(following: String, follower: String) = {
+    DatabaseConnect.insert(followTable, Map(
+      "username" -> following,
+      "follow_type" -> "follower",
+      "actor" -> follower
+    ))
+    DatabaseConnect.insert(followTable, Map(
+      "username" -> follower,
+      "follow_type" -> "following",
+      "actor" -> following
+    ))
+  }
+
 
   def putActivity(username: String, feedname: String, activity: Activity) = {
-    val year = activity.published.getYear()
-    val published = activity.published.getMillis()
+    val year = new DateTime(activity.published).getYear()
     val values = Map(
       "username" -> username,
       "feedname" -> feedname,
       "activity_id" -> activity.id,
-      "published" -> published,
+      "published" -> activity.published,
       "cluster_key" -> getClusterKey(activity),
       "year" -> year,
       "actor" -> activity.actor,
@@ -60,6 +91,38 @@ object DatabaseWrapper {
 
     DatabaseConnect.insert(activityTable, values)
   }
+
+
+
+  def putActivitiesAsync(containers: List[KafkaActivityContainer])(onComplete: Try[Done] => Unit) = {
+    case class SContainer(follower: String, targetFeed: String, activity: Activity)
+    implicit val ec =  scala.concurrent.ExecutionContext.Implicits.global
+    val fields = List("actor","username","published","year","cluster_key","activity_id","feedname","verb")
+    val binder = (c: SContainer, statement: PreparedStatement) => {
+        statement.bind(
+          c.activity.actor,
+          c.follower,
+          Long.box(c.activity.published),
+          Long.box(new DateTime(c.activity.published).getYear),
+          getClusterKey(c.activity),
+          c.activity.id,
+          c.targetFeed,
+          c.activity.verb
+        )
+    }
+
+    var source = Source(containers).mapConcat[SContainer]({
+      container: KafkaActivityContainer =>
+        container.followers.toList.map(
+          follower => SContainer(follower, container.targetFeed, container.activity
+          )
+        )
+    })
+    val sink = DatabaseConnect.putActivitySinc[SContainer](activityTable, fields, binder)
+    source.runWith(sink).onComplete(onComplete)
+  }
+
+
 
   def getActivities(username: String, feedname: String, contid: ContinuationId, limit: Int = 10): ActivityResultSet = {
     contid match {
@@ -73,7 +136,7 @@ object DatabaseWrapper {
       case contid: ActivityContId => {
         val rs = DatabaseConnect.query( getActivityQueryBuilder(username, feedname, contid, limit) )
         val res = rawResultsToActivities(rs)
-        doGetActivities(username, feedname, contid.published.getYear - 1, limit, res.length, res)
+        doGetActivities(username, feedname, new DateTime(contid.published).getYear - 1, limit, res.length, res)
       }
     }
 
@@ -116,6 +179,8 @@ object DatabaseWrapper {
     ls.toList
   }
 
+  // TODO: add setFetchSize to requests (read doc)
+
   private def getActivityQueryBuilder(username: String, feedname: String, year: Int, limit: Int): Select = {
     QueryBuilder
       .select()
@@ -132,7 +197,7 @@ object DatabaseWrapper {
       .from(activityTable)
       .where(QueryBuilder.eq("username", username))
       .and(QueryBuilder.eq("feedname", feedname))
-      .and(QueryBuilder.eq("year", contid.published.getYear))
+      .and(QueryBuilder.eq("year", new DateTime(contid.published).getYear))
       .and(QueryBuilder.lt("cluster_key", getClusterKey(contid.published, contid.activity_id)))
       .limit(limit)
   }
@@ -141,7 +206,7 @@ object DatabaseWrapper {
     Activity(
       verb = row.getString("verb"),
       actor = row.getString("actor"),
-      published = new DateTime(row.getLong("published")),
+      published = row.getLong("published"),
       obj = Option(row.getString("object")),
       target = Option(row.getString("target")),
       foreign_id = Option(row.getString("foreign_id")),
@@ -149,11 +214,11 @@ object DatabaseWrapper {
     )
   }
 
-  private def getClusterKey(activity: Activity): String = {
-    activity.published.getMillis.toString + ";" + activity.id.toString
+   def getClusterKey(activity: Activity): String = {
+    activity.published.toString + ";" + activity.id.toString
   }
 
-  private def getClusterKey(published: DateTime, activity_id: UUID): String = {
-    published.getMillis.toString + ";" + activity_id.toString
+   def getClusterKey(published: Long, activity_id: UUID): String = {
+    published.toString + ";" + activity_id.toString
   }
 }

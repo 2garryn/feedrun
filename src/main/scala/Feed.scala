@@ -1,88 +1,41 @@
-import java.util.UUID
-
 import org.joda.time.DateTime
+import java.util.Properties
+import akka.actor.Props
+import org.apache.kafka.clients.producer._
+
 
 object Feed extends App{
-/*
 
-  val contid = new ActivityContId(DateTime.now, UUID.randomUUID())
-  val contid2 = new ActivityContId().fromStringId(contid.toStringId().getOrElse(""))
-  val resultset = ActivityResultSet(contid)
-
-  println(resultset)
-  println(contid)
-  println(contid.toStringId())
-  println(contid2)
-*/
-/*
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2017", "dosome"))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2017", "somet"))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2017", "somet333asd"))
-
-  val d1 = DateTime.now.minusYears(1)
-  val d2 = DateTime.now.minusYears(2)
-
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2016", "dosome", published = d1))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2016", "somet", published = d1))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2016", "somet333asd", published = d1))
-
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2015", "dosome", published = d2))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2015", "somet", published = d2))
-  ActivityManager.dispatch("artem", "myfeed1", Activity("2015", "somet333asd", published = d2))
-*/
-
-  var LL = List[Activity]()
-  val r = DatabaseWrapper.getActivities("artem", "myfeed1", ActivityContIdStart(), 20)
-  for(s <- r.activities) {
-    println(s.published, " ", s.id)
-  }
-  println(r.contid)
+  implicit val system = GlobalActorSystem.getActorSystem
+  implicit val materializer = GlobalActorSystem.getMaterializer
+  system.actorOf(Props[ConsumerActor](new ConsumerActor(0)), "myactor0")
+  system.actorOf(Props[ConsumerActor](new ConsumerActor(1)), "myactor1")
 
 
+  val  props = new Properties()
+  props.put("bootstrap.servers", "127.0.0.1:9092")
+  props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+  props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+  props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner")
+  val producer = new KafkaProducer[String, String](props)
 
-  println("----")
-  var r2 = DatabaseWrapper.getActivities("artem", "myfeed1", ActivityContIdStart(), 5)
-  for(s <- r2.activities) {
-    println(s.published, " ", s.id)
-  }
+  val activity = Activity("myactor1dd", "nothign", DateTime.now().getMillis)
+  val container = KafkaActivityContainer("me", "allstuff", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
 
-  LL = LL ++ r2.activities
+  val activity2 = Activity("myacdddtsd", "myaction", DateTime.now().getMillis)
+  val container2 = KafkaActivityContainer("messfffs", "ohteaddsdrfeed", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
 
-  println(r2.contid)
-  println("----")
+  producer.send(new ProducerRecord("test2", container.actor, container.serialize))
+  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
+  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
+  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
+  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
 
-
-  var r3 = DatabaseWrapper.getActivities("artem", "myfeed1", r2.contid, 5)
-  for(s <- r3.activities) {
-    println(s.published, " ", s.id)
-  }
-  LL = LL ++ r3.activities
-
-  println(r3.contid)
-  println("----")
-  var r4 = DatabaseWrapper.getActivities("artem", "myfeed1", r3.contid, 5)
-
-  for(s <- r4.activities) {
-    println(s.published, " ", s.id)
-  }
-  LL = LL ++ r4.activities
-  println(r4.contid.toStringId)
-  println(r4.contid)
+  producer.close()
 
 
-  println("----")
-  var r5 = DatabaseWrapper.getActivities("artem", "myfeed1", r4.contid, 5)
-
-  for(s <- r5.activities) {
-    println(s.published, " ", s.id)
-  }
-  LL = LL ++ r5.activities
-  println(r5.contid)
-
-
-
-  println(r.activities == LL)
-
+  val ret = DatabaseWrapper.getActivities("user5qwe6", "allstuff", ActivityContIdStart(), 100)
+  println(ret)
 
 
 }

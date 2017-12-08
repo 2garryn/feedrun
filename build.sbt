@@ -19,7 +19,10 @@ libraryDependencies ++= Seq(
   "com.datastax.cassandra" % "cassandra-driver-extras" % "3.3.2",
   "org.slf4j" % "slf4j-simple" % "1.7.21",
   "com.github.nscala-time" %% "nscala-time" % "2.18.0",
-  "commons-codec" % "commons-codec" % "1.10"
+  "commons-codec" % "commons-codec" % "1.10",
+  "com.lightbend.akka" %% "akka-stream-alpakka-cassandra" % "0.14",
+  "org.apache.kafka" % "kafka-clients" % "1.0.0",
+  "org.json4s" %% "json4s-ext" % "3.6.0-M1"
 
 
 )

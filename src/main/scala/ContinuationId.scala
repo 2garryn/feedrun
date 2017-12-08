@@ -11,7 +11,7 @@ object ActivityContidParser {
     try {
       val splitted = s.split(";")
       splitted(0) match {
-        case "ActivityContId" => Some(ActivityContId(new DateTime(splitted(1).toLong), UUID.fromString(splitted(2))))
+        case "ActivityContId" => Some(ActivityContId(splitted(1).toLong, UUID.fromString(splitted(2))))
         case "start" => Some(ActivityContIdStart())
         case "stop" => Some(ActivityContIdStop())
         case _ => None
@@ -26,8 +26,8 @@ object ActivityContidParser {
 
 case class ActivityContIdStart() extends ContinuationId { def toStringId: String = "start" }
 case class ActivityContIdStop()  extends ContinuationId { def toStringId: String = "stop" }
-case class ActivityContId(published: DateTime, activity_id: UUID) extends ContinuationId {
+case class ActivityContId(published: Long, activity_id: UUID) extends ContinuationId {
   def toStringId(): String = {
-    this.getClass.getSimpleName + ";" + published.getMillis.toString + ";" + activity_id.toString
+    this.getClass.getSimpleName + ";" + published.toString + ";" + activity_id.toString
   }
 }
