@@ -12,11 +12,10 @@ import scala.util.Try
 
 
 object DatabaseWrapper {
-  val keyspace = "mybase2"
+  val keyspace = ConfigHandler.getString("cassandra-keyspace")
   val activityTable = "activities"
   val followTable = "follow"
   val startYear = 2015
-
   val insertName = "insertActivity"
 
 

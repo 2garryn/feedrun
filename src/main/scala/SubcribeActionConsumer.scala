@@ -15,11 +15,11 @@ import scala.util.Try
 class ConsumerActor(partitionId: Int) extends Actor {
   println("Actor starting " + self.path.name)
   // Settings
-  val bootstrapServers = "localhost:9092"
+  val bootstrapServers = ConfigHandler.getString("kafka-bootstrap-servers")
   val groupId = "consumers"
-  val topicName = "test2"
+  val topicName = ConfigHandler.getString("kafka-topic-acitivity-stage-2")
   val consumerTimeout = 0
-  val pollRecords = 3
+  val pollRecords = ConfigHandler.getInt("kafka-consumer-poll-records")
 
   val actorSystem = GlobalActorSystem.getActorSystem
 
@@ -78,6 +78,7 @@ sealed class ConsumerActorHelper(parent: ActorRef) extends Actor {
   def receive = {
     case containers: ListBuffer[KafkaActivityContainer] =>
       DatabaseWrapper.putActivitiesAsync(containers.toList) { res: Try[Done] =>
+        println("Did some work " + self.path)
         parent ! "more"
       }
   }

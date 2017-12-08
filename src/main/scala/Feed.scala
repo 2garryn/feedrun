@@ -13,23 +13,40 @@ object Feed extends App{
 
 
   val  props = new Properties()
-  props.put("bootstrap.servers", "127.0.0.1:9092")
+  props.put("bootstrap.servers", ConfigHandler.getString("kafka-bootstrap-servers"))
   props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
   props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
   props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner")
+  val topicName = ConfigHandler.getString("kafka-topic-acitivity-stage-2")
+
   val producer = new KafkaProducer[String, String](props)
+  println("COUNT OF PARTS", producer.partitionsFor(topicName).size())
 
   val activity = Activity("myactor1dd", "nothign", DateTime.now().getMillis)
   val container = KafkaActivityContainer("me", "allstuff", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
 
   val activity2 = Activity("myacdddtsd", "myaction", DateTime.now().getMillis)
   val container2 = KafkaActivityContainer("messfffs", "ohteaddsdrfeed", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
-
-  producer.send(new ProducerRecord("test2", container.actor, container.serialize))
-  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
-  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
-  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
-  producer.send(new ProducerRecord("test2", container2.actor, container2.serialize))
+  producer.send(new ProducerRecord(topicName, "asd", container.serialize))
+  producer.send(new ProducerRecord(topicName, "asssd", container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container.serialize))
+  producer.send(new ProducerRecord(topicName,  container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container.serialize))
+  producer.send(new ProducerRecord(topicName,  container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container.serialize))
+  producer.send(new ProducerRecord(topicName,  container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
+  producer.send(new ProducerRecord(topicName, container2.serialize))
 
   producer.close()
 

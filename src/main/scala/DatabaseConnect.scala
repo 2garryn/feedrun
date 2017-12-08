@@ -7,8 +7,8 @@ import com.datastax.driver.core._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 object DatabaseConnect {
-  val host = "localhost"
-  val port = 32769
+  val host = ConfigHandler.getString("cassandra-address")
+  val port = ConfigHandler.getInt("cassandra-port")
 
   var prepStatementsMap = Map[String, PreparedStatement]()
 
