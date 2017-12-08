@@ -17,16 +17,24 @@ object DatabaseWrapper {
   val followTable = "follow"
   val startYear = 2015
 
+  val insertName = "insertActivity"
+
+
   implicit val system = GlobalActorSystem.getActorSystem
   implicit val materializer = GlobalActorSystem.getMaterializer
 
   DatabaseConnect.initialize(keyspace)
   createTables()
-
+  addPrepareStatements()
 
   def createTables() = {
     createActivityTable(activityTable)
     createFollowTable(followTable)
+  }
+
+  def addPrepareStatements() = {
+    val insertActivityFields = List("actor","username","published","year","cluster_key","activity_id","feedname","verb")
+    DatabaseConnect.addPreparedStatement(insertName, activityTable, insertActivityFields)
   }
 
 
@@ -97,7 +105,6 @@ object DatabaseWrapper {
   def putActivitiesAsync(containers: List[KafkaActivityContainer])(onComplete: Try[Done] => Unit) = {
     case class SContainer(follower: String, targetFeed: String, activity: Activity)
     implicit val ec =  scala.concurrent.ExecutionContext.Implicits.global
-    val fields = List("actor","username","published","year","cluster_key","activity_id","feedname","verb")
     val binder = (c: SContainer, statement: PreparedStatement) => {
         statement.bind(
           c.activity.actor,
@@ -110,16 +117,14 @@ object DatabaseWrapper {
           c.activity.verb
         )
     }
-
-    var source = Source(containers).mapConcat[SContainer]({
+    val sink = DatabaseConnect.putActivitySinc[SContainer](insertName, binder)
+    Source(containers).mapConcat[SContainer]({
       container: KafkaActivityContainer =>
         container.followers.toList.map(
           follower => SContainer(follower, container.targetFeed, container.activity
           )
         )
-    })
-    val sink = DatabaseConnect.putActivitySinc[SContainer](activityTable, fields, binder)
-    source.runWith(sink).onComplete(onComplete)
+    }).runWith(sink).onComplete(onComplete)
   }
 
 

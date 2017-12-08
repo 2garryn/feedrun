@@ -7,10 +7,10 @@ import com.datastax.driver.core._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 object DatabaseConnect {
-
   val host = "localhost"
   val port = 32769
-  //val keyspace = "feedrun2"
+
+  var prepStatementsMap = Map[String, PreparedStatement]()
 
   val poolingOptions: PoolingOptions =
       new PoolingOptions()
@@ -30,14 +30,24 @@ object DatabaseConnect {
     useKeyspace(keyspace)
   }
 
+  def addPreparedStatement(name: String, table: String, fields: List[String]) = {
+    prepStatementsMap get name match {
+      case None => {
+        val st = insertPrepareStatement(table, fields)
+        val preparedStatement = session.prepare(st)
+        prepStatementsMap = prepStatementsMap + (name -> preparedStatement)
+      }
+      case _ => {
+        throw new Exception("Prepared statement name " + name + " has been already used")
+      }
+    }
+  }
+
   def createKeyspace(keyspace: String) = {
     query("CREATE KEYSPACE IF NOT EXISTS " + keyspace + " WITH replication = {'class':'SimpleStrategy', 'replication_factor':1};")
-
   }
 
-  def useKeyspace(keyspace: String) = {
-    query("USE " + keyspace)
-  }
+  def useKeyspace(keyspace: String) = query("USE " + keyspace)
 
   def query(str: String): ResultSet = session.execute(str)
   def query(stat: Statement): ResultSet = session.execute(stat)
@@ -94,9 +104,8 @@ object DatabaseConnect {
     session.execute(query)
   }
 
-  def putActivitySinc[T](table: String, fields: List[String],  binder: (T, PreparedStatement) => BoundStatement): Sink[T, Future[Done]] = {
-    val st = insertPrepareStatement(table, fields)
-    val preparedStatement = session.prepare(st)
+  def putActivitySinc[T](prepName: String,  binder: (T, PreparedStatement) => BoundStatement): Sink[T, Future[Done]] = {
+    val preparedStatement = prepStatementsMap(prepName)
     CassandraSink[T](parallelism = 2, preparedStatement, binder)
   }
 
