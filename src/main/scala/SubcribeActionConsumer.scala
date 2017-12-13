@@ -77,7 +77,7 @@ sealed class ConsumerActorHelper(parent: ActorRef) extends Actor {
   parent ! "more"
   def receive = {
     case containers: ListBuffer[KafkaActivityContainer] =>
-      DatabaseWrapper.putActivitiesAsync(containers.toList) { res: Try[Done] =>
+      DatabaseWrapper.putDispatchableActivitiesAsync(containers.toList) { res: Try[Done] =>
         println("Did some work " + self.path)
         parent ! "more"
       }

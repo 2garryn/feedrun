@@ -1,16 +1,20 @@
 import java.util.UUID
+
 import akka.{Done, NotUsed}
-import akka.stream.alpakka.cassandra.scaladsl.CassandraSink
+import akka.stream.alpakka.cassandra.scaladsl.{CassandraSink, CassandraSource}
 import akka.stream.scaladsl.Sink
 import com.datastax.driver.core._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 object DatabaseConnect {
-  val host = ConfigHandler.getString("cassandra-address")
+  val host = ConfigHandler.getString("cassandra-contact-point")
   val port = ConfigHandler.getInt("cassandra-port")
 
   var prepStatementsMap = Map[String, PreparedStatement]()
+
+  implicit val system = GlobalActorSystem.getActorSystem
+  implicit val materializer = GlobalActorSystem.getMaterializer
 
   val poolingOptions: PoolingOptions =
       new PoolingOptions()
@@ -107,6 +111,18 @@ object DatabaseConnect {
   def putActivitySinc[T](prepName: String,  binder: (T, PreparedStatement) => BoundStatement): Sink[T, Future[Done]] = {
     val preparedStatement = prepStatementsMap(prepName)
     CassandraSink[T](parallelism = 2, preparedStatement, binder)
+  }
+
+
+  def getDataFlow(query: String, fetchSize: Int, group: Int, asyncN: Int) (f: (Seq[Row]) => Unit) = {
+    val stmt = new SimpleStatement(query).setFetchSize(fetchSize)
+    val source = CassandraSource(stmt)
+      .grouped(group)
+      .mapAsyncUnordered(asyncN)({
+        batch => Future {
+          f(batch)
+        }
+      }).runWith(Sink.ignore)
   }
 
 

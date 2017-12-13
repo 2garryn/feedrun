@@ -1,19 +1,22 @@
 import java.util.UUID
 
 import akka.Done
-import akka.stream.scaladsl.Source
-import com.datastax.driver.core.{PreparedStatement, ResultSet, Row}
+import akka.stream.alpakka.cassandra.scaladsl.CassandraSource
+import akka.stream.scaladsl.{Sink, Source}
+import com.datastax.driver.core.{PreparedStatement, ResultSet, Row, SimpleStatement}
 import com.datastax.driver.core.querybuilder.{QueryBuilder, Select}
 import org.joda.time.DateTime
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.Future
 import scala.util.Try
 
 
 object DatabaseWrapper {
   val keyspace = ConfigHandler.getString("cassandra-keyspace")
-  val activityTable = "activities"
+  val feedTable = "feed"
+  val dispatchedFeedTable = "dispatched_feed"
   val followTable = "follow"
   val startYear = 2015
   val insertName = "insertActivity"
@@ -27,17 +30,18 @@ object DatabaseWrapper {
   addPrepareStatements()
 
   def createTables() = {
-    createActivityTable(activityTable)
+    createFeedTable(feedTable)
+    createFeedTable(dispatchedFeedTable)
     createFollowTable(followTable)
   }
 
   def addPrepareStatements() = {
     val insertActivityFields = List("actor","username","published","year","cluster_key","activity_id","feedname","verb")
-    DatabaseConnect.addPreparedStatement(insertName, activityTable, insertActivityFields)
+    DatabaseConnect.addPreparedStatement(insertName, dispatchedFeedTable, insertActivityFields)
   }
 
 
-  def createActivityTable(activityTable: String) = {
+  def createFeedTable(activityTable: String) = {
     val fields = Map(
       "username" -> "text",
       "feedname" -> "text",
@@ -66,7 +70,7 @@ object DatabaseWrapper {
     DatabaseConnect.createTable(followTable, fields, partKey, clusterKey, "actor", "asc")
   }
 
-  def putFollow(following: String, follower: String) = {
+  def putFollow(follower: String, following: String) = {
     DatabaseConnect.insert(followTable, Map(
       "username" -> following,
       "follow_type" -> "follower",
@@ -96,12 +100,12 @@ object DatabaseWrapper {
       "foreign_id" -> activity.foreign_id
     )
 
-    DatabaseConnect.insert(activityTable, values)
+    DatabaseConnect.insert(feedTable, values)
   }
 
 
-
-  def putActivitiesAsync(containers: List[KafkaActivityContainer])(onComplete: Try[Done] => Unit) = {
+  // TODO: Use batch inserts with prepare statements
+  def putDispatchableActivitiesAsync(containers: List[KafkaActivityContainer])(onComplete: Try[Done] => Unit) = {
     case class SContainer(follower: String, targetFeed: String, activity: Activity)
     implicit val ec =  scala.concurrent.ExecutionContext.Implicits.global
     val binder = (c: SContainer, statement: PreparedStatement) => {
@@ -124,6 +128,12 @@ object DatabaseWrapper {
           )
         )
     }).runWith(sink).onComplete(onComplete)
+  }
+
+
+  def mapOverFollowers(following: String) (f: (Seq[String]) => Unit) = {
+    val query = s"SELECT actor FROM $followTable WHERE username='$following' AND follow_type='follower'"
+    DatabaseConnect.getDataFlow(query, 50, 50, 10) { rows: Seq[Row] => f(rows.map(_.getString("actor"))) }
   }
 
 
@@ -188,7 +198,7 @@ object DatabaseWrapper {
   private def getActivityQueryBuilder(username: String, feedname: String, year: Int, limit: Int): Select = {
     QueryBuilder
       .select()
-      .from(activityTable)
+      .from(feedTable)
       .where(QueryBuilder.eq("username", username))
       .and(QueryBuilder.eq("feedname", feedname))
       .and(QueryBuilder.eq("year", year))
@@ -198,13 +208,14 @@ object DatabaseWrapper {
   private def getActivityQueryBuilder(username: String, feedname: String, contid: ActivityContId, limit: Int): Select = {
     QueryBuilder
       .select()
-      .from(activityTable)
+      .from(feedTable)
       .where(QueryBuilder.eq("username", username))
       .and(QueryBuilder.eq("feedname", feedname))
       .and(QueryBuilder.eq("year", new DateTime(contid.published).getYear))
       .and(QueryBuilder.lt("cluster_key", getClusterKey(contid.published, contid.activity_id)))
       .limit(limit)
   }
+
 
   private def mapRowToActivity(row: Row): Activity = {
     Activity(

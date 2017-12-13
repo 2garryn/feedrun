@@ -11,6 +11,25 @@ object Feed extends App{
   system.actorOf(Props[ConsumerActor](new ConsumerActor(0)), "myactor0")
   system.actorOf(Props[ConsumerActor](new ConsumerActor(1)), "myactor1")
 
+  DatabaseWrapper.putFollow("artem", "sergey")
+  DatabaseWrapper.putFollow("sabya", "sergey")
+  DatabaseWrapper.putFollow("igor", "sergey")
+
+  val activity2 = Activity("sergey", "myaction", DateTime.now().getMillis)
+  DispatchableFeed.dispatchFeed("sergey", "newonefeed", activity2)
+
+  val ret = DatabaseWrapper.getActivities("artem", "newonefeed", ActivityContIdStart(), 100)
+  println(ret)
+
+  DatabaseWrapper.mapOverFollowers("sergey") {
+    for(fol <- _) {
+      println(fol)
+    }
+  }
+
+  /*
+
+
 
   val  props = new Properties()
   props.put("bootstrap.servers", ConfigHandler.getString("kafka-bootstrap-servers"))
@@ -53,6 +72,6 @@ object Feed extends App{
 
   val ret = DatabaseWrapper.getActivities("user5qwe6", "allstuff", ActivityContIdStart(), 100)
   println(ret)
-
+*/
 
 }
