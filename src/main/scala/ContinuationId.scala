@@ -1,13 +1,9 @@
 import java.util.UUID
-
-import org.joda.time.DateTime
-
-import scala.util.{Success, Failure, Try}
+import scala.util.Try
 
 trait ContinuationId {
   def toStringId: String
 }
-
 
 object ActivityContidParser {
   def parse(s: String): Try[ContinuationId] = {
@@ -21,9 +17,6 @@ object ActivityContidParser {
     })
   }
 }
-
-
-
 
 case class ActivityContIdStart() extends ContinuationId { def toStringId: String = "start" }
 case class ActivityContIdStop()  extends ContinuationId { def toStringId: String = "stop" }

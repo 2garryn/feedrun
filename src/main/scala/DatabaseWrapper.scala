@@ -1,15 +1,13 @@
 import java.util.UUID
 
 import akka.Done
-import akka.stream.alpakka.cassandra.scaladsl.CassandraSource
-import akka.stream.scaladsl.{Sink, Source}
-import com.datastax.driver.core.{PreparedStatement, ResultSet, Row, SimpleStatement}
+import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
+import com.datastax.driver.core._
 import com.datastax.driver.core.querybuilder.{QueryBuilder, Select}
 import org.joda.time.DateTime
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.Future
 import scala.util.Try
 
 
@@ -103,13 +101,45 @@ object DatabaseWrapper {
     DatabaseConnect.insert(feedTable, values)
   }
 
+  case class FollowerContainer(statName: String, stat: PreparedStatement, follower: String, targetFeed: String, activity: Activity)
+
+
+
 
   // TODO: Use batch inserts with prepare statements
-  def putDispatchableActivitiesAsync(containers: List[KafkaActivityContainer])(onComplete: Try[Done] => Unit) = {
+
+  def putDispatchableActivitiesAsync(containers: List[DispatchContainerStage2])(onComplete: Try[Done] => Unit) = {
     case class SContainer(follower: String, targetFeed: String, activity: Activity)
-    implicit val ec =  scala.concurrent.ExecutionContext.Implicits.global
-    val binder = (c: SContainer, statement: PreparedStatement) => {
-        statement.bind(
+    implicit val ex = scala.concurrent.ExecutionContext.Implicits.global
+
+    val sink = Flow[FollowerContainer]
+      .mapAsyncUnordered(5)(fcont => {
+        val binded = bindStatement(fcont)
+        DatabaseConnect.queryAsync(binded)
+      })
+      .toMat(Sink.ignore)(Keep.right)
+
+    Source(containers).mapConcat[FollowerContainer]({
+      container: DispatchContainerStage2 =>
+        val (stName, statement) = statementByAction(container)
+        container.followers.toList.map(
+          follower => FollowerContainer(stName, statement, follower, container.targetFeed, container.activity)
+        )
+    }).runWith(sink).onComplete(onComplete)
+
+  }
+
+  private def statementByAction(container: DispatchContainerStage2): (String, PreparedStatement) = {
+    container match {
+      case c: DispatchAddActivityStage2 => (insertName, DatabaseConnect.getPreparedStatement(insertName))
+      case c: DispatchDeleteActivityStage2 => ("deleteActivityTable", DatabaseConnect.getPreparedStatement("deleteActivityTable"))
+    }
+  }
+
+  private def bindStatement(c: FollowerContainer): BoundStatement = {
+    c.statName match {
+      case n if n == insertName =>
+        c.stat.bind(
           c.activity.actor,
           c.follower,
           Long.box(c.activity.published),
@@ -120,20 +150,15 @@ object DatabaseWrapper {
           c.activity.verb
         )
     }
-    val sink = DatabaseConnect.putActivitySinc[SContainer](insertName, binder)
-    Source(containers).mapConcat[SContainer]({
-      container: KafkaActivityContainer =>
-        container.followers.toList.map(
-          follower => SContainer(follower, container.targetFeed, container.activity
-          )
-        )
-    }).runWith(sink).onComplete(onComplete)
+
   }
 
 
-  def mapOverFollowers(following: String) (f: (Seq[String]) => Unit) = {
+  def mapOverFollowers(following: String) (f: (Seq[String]) => Unit) (done: () => Unit) = {
     val query = s"SELECT actor FROM $followTable WHERE username='$following' AND follow_type='follower'"
-    DatabaseConnect.getDataFlow(query, 50, 50, 10) { rows: Seq[Row] => f(rows.map(_.getString("actor"))) }
+    DatabaseConnect.getDataFlow(query, 50, 50, 10)  {
+      rows: Seq[Row] => f(rows.map(_.getString("actor")))
+    } (done)
   }
 
 
@@ -198,7 +223,7 @@ object DatabaseWrapper {
   private def getActivityQueryBuilder(username: String, feedname: String, year: Int, limit: Int): Select = {
     QueryBuilder
       .select()
-      .from(feedTable)
+      .from(dispatchedFeedTable)
       .where(QueryBuilder.eq("username", username))
       .and(QueryBuilder.eq("feedname", feedname))
       .and(QueryBuilder.eq("year", year))
@@ -208,7 +233,7 @@ object DatabaseWrapper {
   private def getActivityQueryBuilder(username: String, feedname: String, contid: ActivityContId, limit: Int): Select = {
     QueryBuilder
       .select()
-      .from(feedTable)
+      .from(dispatchedFeedTable)
       .where(QueryBuilder.eq("username", username))
       .and(QueryBuilder.eq("feedname", feedname))
       .and(QueryBuilder.eq("year", new DateTime(contid.published).getYear))

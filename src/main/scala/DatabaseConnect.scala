@@ -1,12 +1,14 @@
 import java.util.UUID
 
-import akka.{Done, NotUsed}
+import akka.Done}
 import akka.stream.alpakka.cassandra.scaladsl.{CassandraSink, CassandraSource}
 import akka.stream.scaladsl.Sink
 import com.datastax.driver.core._
+import com.google.common.util.concurrent.{FutureCallback, Futures}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
+import scala.util.Try
 object DatabaseConnect {
   val host = ConfigHandler.getString("cassandra-contact-point")
   val port = ConfigHandler.getInt("cassandra-port")
@@ -47,6 +49,8 @@ object DatabaseConnect {
     }
   }
 
+  def getPreparedStatement(name: String): PreparedStatement = prepStatementsMap(name)
+
   def createKeyspace(keyspace: String) = {
     query("CREATE KEYSPACE IF NOT EXISTS " + keyspace + " WITH replication = {'class':'SimpleStrategy', 'replication_factor':1};")
   }
@@ -55,6 +59,17 @@ object DatabaseConnect {
 
   def query(str: String): ResultSet = session.execute(str)
   def query(stat: Statement): ResultSet = session.execute(stat)
+
+  def queryAsync(stat: Statement): Future[ResultSet] = {
+    val res = session.executeAsync(stat)
+    val p = Promise[ResultSet]()
+    Futures.addCallback(res,
+      new FutureCallback[ResultSet] {
+        def onSuccess(r: ResultSet) = p success r
+        def onFailure(t: Throwable) = p failure t
+      })
+    p.future
+  }
 
 
   def createTable(name: String, fields: Map[String, String], partKey: Seq[String], clusterKey: Seq[String], orderField: String, order: String = "DESC" ) = {
@@ -114,7 +129,8 @@ object DatabaseConnect {
   }
 
 
-  def getDataFlow(query: String, fetchSize: Int, group: Int, asyncN: Int) (f: (Seq[Row]) => Unit) = {
+
+  def getDataFlow(query: String, fetchSize: Int, group: Int, asyncN: Int) (f: (Seq[Row]) => Unit) (done: () => Unit) = {
     val stmt = new SimpleStatement(query).setFetchSize(fetchSize)
     val source = CassandraSource(stmt)
       .grouped(group)
@@ -122,7 +138,7 @@ object DatabaseConnect {
         batch => Future {
           f(batch)
         }
-      }).runWith(Sink.ignore)
+      }).runWith(Sink.ignore).onComplete({_: Try[Done] => done()})
   }
 
 

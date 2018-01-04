@@ -23,7 +23,9 @@ libraryDependencies ++= Seq(
   "com.lightbend.akka" %% "akka-stream-alpakka-cassandra" % "0.14",
   "org.apache.kafka" % "kafka-clients" % "1.0.0",
   "org.json4s" %% "json4s-ext" % "3.6.0-M1",
-  "com.lambdista" %% "config" % "0.5.1"
+  "com.lambdista" %% "config" % "0.5.1",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2"
+
 
 
 )

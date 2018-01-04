@@ -1,25 +1,24 @@
 import java.util.Properties
 
 import akka.actor.{Actor, ActorRef, Props}
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecords, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
-import scala.collection.JavaConverters._
 import java.util
 
 import akka.Done
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
 
-class ConsumerActor(partitionId: Int) extends Actor {
-  println("Actor starting " + self.path.name)
+class Stage2Actor(partitionId: Int) extends Actor {
   // Settings
   val bootstrapServers = ConfigHandler.getString("kafka-bootstrap-servers")
   val groupId = "consumers"
   val topicName = ConfigHandler.getString("kafka-topic-acitivity-stage-2")
-  val consumerTimeout = 0
-  val pollRecords = ConfigHandler.getInt("kafka-consumer-poll-records")
+  val consumerTimeout = 10
+  val pollRecords = ConfigHandler.getInt("kafka-consumer-poll-records-stage-2")
 
   val actorSystem = GlobalActorSystem.getActorSystem
 
@@ -36,49 +35,41 @@ class ConsumerActor(partitionId: Int) extends Actor {
   val partition = new TopicPartition(topicName, partitionId);
   consumer.assign(util.Collections.singletonList(partition))
 
-  val helper = actorSystem.actorOf(Props[ConsumerActorHelper](
-    new ConsumerActorHelper(self)),
-    self.path.name + "_helper"
+  val helper = actorSystem.actorOf(Props[Stage2ConsumerActorHelper](
+    new Stage2ConsumerActorHelper(self)),
+    self.path.name + "_stage2_helper"
   )
 
-
-  def pollKafkaRecords(consumer: KafkaConsumer[String, String]) = {
-    val records= consumer.poll(consumerTimeout)
-  }
-
   def receive = {
-    case "more" => pollNewActivities
+    case "more" => pollActionActivities
   }
 
   @tailrec
-  private def pollNewActivities: Int = {
+  private def pollActionActivities: Int = {
      consumer.poll(consumerTimeout) match {
-       case records: ConsumerRecords[String, String] if records.count() == 0 => pollNewActivities
+       case records: ConsumerRecords[String, String] if records.count() == 0 => pollActionActivities
        case records: ConsumerRecords[String, String] => {
-         consumeNewActivities(records)
+         consumeActionActivities(records)
          return 0
        }
      }
   }
 
-  def consumeNewActivities(records: ConsumerRecords[String, String]) = {
-    var containers = ListBuffer[KafkaActivityContainer]()
-    for (record <- records.asScala){
-      containers += KafkaActivityContainer.deserialize(record.value())
-    }
+  private def consumeActionActivities(records: ConsumerRecords[String, String]) = {
+    var containers = ListBuffer[DispatchContainer]()
+    records.forEach({ record: ConsumerRecord[String, String] =>
+      containers += DispatchContainer.deserialize(record.value())
+    })
     helper ! containers
   }
 
 }
 
-
-sealed class ConsumerActorHelper(parent: ActorRef) extends Actor {
-  println("ConsumerActorHelper started")
+sealed class Stage2ConsumerActorHelper(parent: ActorRef) extends Actor {
   parent ! "more"
   def receive = {
-    case containers: ListBuffer[KafkaActivityContainer] =>
+    case containers: ListBuffer[DispatchContainerStage2] =>
       DatabaseWrapper.putDispatchableActivitiesAsync(containers.toList) { res: Try[Done] =>
-        println("Did some work " + self.path)
         parent ! "more"
       }
   }

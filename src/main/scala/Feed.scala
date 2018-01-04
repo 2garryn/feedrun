@@ -1,77 +1,42 @@
-import org.joda.time.DateTime
-import java.util.Properties
+
 import akka.actor.Props
-import org.apache.kafka.clients.producer._
 
-
-object Feed extends App{
-
+object Feed{
   implicit val system = GlobalActorSystem.getActorSystem
-  implicit val materializer = GlobalActorSystem.getMaterializer
-  system.actorOf(Props[ConsumerActor](new ConsumerActor(0)), "myactor0")
-  system.actorOf(Props[ConsumerActor](new ConsumerActor(1)), "myactor1")
 
-  DatabaseWrapper.putFollow("artem", "sergey")
-  DatabaseWrapper.putFollow("sabya", "sergey")
-  DatabaseWrapper.putFollow("igor", "sergey")
-
-  val activity2 = Activity("sergey", "myaction", DateTime.now().getMillis)
-  DispatchableFeed.dispatchFeed("sergey", "newonefeed", activity2)
-
-  val ret = DatabaseWrapper.getActivities("artem", "newonefeed", ActivityContIdStart(), 100)
-  println(ret)
-
-  DatabaseWrapper.mapOverFollowers("sergey") {
-    for(fol <- _) {
-      println(fol)
-    }
+  def init = {
+    Logger.log.info("Starting consumer actors...")
+    startStage2Actors()
+    startStage1Actors()
   }
 
-  /*
 
+  def dispatchActivity(actor: String, feed: String, activity: Activity) = {
+    val item = DispatchAddActivityStage1(actor, feed, activity)
+    Stage1Producer.send(item)
+  }
 
+  def putActivity(username: String, feed: String, activity: Activity) = {
+    DatabaseWrapper.putActivity(username, feed, activity)
+  }
 
-  val  props = new Properties()
-  props.put("bootstrap.servers", ConfigHandler.getString("kafka-bootstrap-servers"))
-  props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-  props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-  props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner")
-  val topicName = ConfigHandler.getString("kafka-topic-acitivity-stage-2")
+  def follow(follower: String, following: String) = {
+    DatabaseWrapper.putFollow(follower, following)
+  }
 
-  val producer = new KafkaProducer[String, String](props)
-  println("COUNT OF PARTS", producer.partitionsFor(topicName).size())
+  private def startStage2Actors() = {
+    List.range(0, Stage2Producer.partitionsN).foreach({ n: Int =>
+      Logger.log.info("Starting stage2 consumer actor: " + n.toString)
+      system.actorOf(Props[Stage2Actor](new Stage2Actor(n)), "stage2actor_" + n.toString)
+    })
+  }
 
-  val activity = Activity("myactor1dd", "nothign", DateTime.now().getMillis)
-  val container = KafkaActivityContainer("me", "allstuff", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
+  private def startStage1Actors() = {
+    List.range(0, Stage1Producer.partitionsN).foreach({ n: Int =>
+      Logger.log.info("Starting stage1 consumer actor: " + n.toString)
+      system.actorOf(Props[Stage1Actor](new Stage1Actor(n)), "stage1actor_" + n.toString)
+    })
+  }
 
-  val activity2 = Activity("myacdddtsd", "myaction", DateTime.now().getMillis)
-  val container2 = KafkaActivityContainer("messfffs", "ohteaddsdrfeed", activity, Seq("user5qwe6", "user6qwe6", "user87qwe8", "user84qwe84"))
-  producer.send(new ProducerRecord(topicName, "asd", container.serialize))
-  producer.send(new ProducerRecord(topicName, "asssd", container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container.serialize))
-  producer.send(new ProducerRecord(topicName,  container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container.serialize))
-  producer.send(new ProducerRecord(topicName,  container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container.serialize))
-  producer.send(new ProducerRecord(topicName,  container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-  producer.send(new ProducerRecord(topicName, container2.serialize))
-
-  producer.close()
-
-
-  val ret = DatabaseWrapper.getActivities("user5qwe6", "allstuff", ActivityContIdStart(), 100)
-  println(ret)
-*/
 
 }
