@@ -1,6 +1,6 @@
 import java.util.UUID
 
-import akka.Done}
+import akka.Done
 import akka.stream.alpakka.cassandra.scaladsl.{CassandraSink, CassandraSource}
 import akka.stream.scaladsl.Sink
 import com.datastax.driver.core._
