@@ -28,8 +28,13 @@ object Feed{
   }
 
   def follow(follower: String, following: String) = {
-    DatabaseWrapper.putFollow(follower, following)
+    DatabaseWrapper.follow(follower, following)
   }
+
+  def unfollow(follower: String, following: String) = {
+    DatabaseWrapper.unfollow(follower, following)
+  }
+
 
   private def startStage2Actors() = {
     List.range(0, Stage2Producer.partitionsN).foreach({ n: Int =>

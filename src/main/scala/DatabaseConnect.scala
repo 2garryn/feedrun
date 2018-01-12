@@ -100,18 +100,7 @@ object DatabaseConnect {
   }
 
   def insert(name: String, values: Map[String, Any], ifNotExist: Boolean = true, ttl: Option[Int] = None, ts: Option[Int] = None) = {
-
-    val converted = values.map ({
-        case (k, i: UUID) => (k, i.toString)
-        case (k, s: String) => (k, "'" + s + "'")
-        case (k, i: Int) => (k, i.toString)
-        case (k, i: Long) => (k, i.toString)
-        case (k, None) => (k, None)
-        case (k, Some(s: String)) => (k, "'" + s + "'")
-        case (k, Some(i: Int)) => (k, i.toString)
-        case (k, Some(i: Long)) => (k, i.toString)
-    }).filter({ case (k, v)=> v != None })
-
+    val converted = toStringPairs(values)
     val fields = converted.keys.mkString(",")
     val cvals  = converted.values.mkString(",")
 
@@ -135,6 +124,11 @@ object DatabaseConnect {
     session.execute(query)
   }
 
+  def delete(name: String, values: Map[String, Any]) = {
+    val req = toStringPairs(values).map({kv: (String, String) => kv._1 + "=" + kv._2}).mkString(" and ")
+    session.execute("DELETE FROM " + name + " WHERE " + req + ";")
+  }
+
   def putActivitySinc[T](prepName: String,  binder: (T, PreparedStatement) => BoundStatement): Sink[T, Future[Done]] = {
     val preparedStatement = prepStatementsMap(prepName)
     CassandraSink[T](parallelism = 2, preparedStatement, binder)
@@ -153,5 +147,18 @@ object DatabaseConnect {
       }).runWith(Sink.ignore).onComplete({_: Try[Done] => done()})
   }
 
+
+  def toStringPairs(values: Map[String, Any]): Map[String, String] = {
+    values.collect ({
+      case (k, i: UUID) => (k, i.toString)
+      case (k, s: String) => (k, "'" + s + "'")
+      case (k, i: Int) => (k, i.toString)
+      case (k, i: Long) => (k, i.toString)
+    //  case (k, None) => (k, None)
+      case (k, Some(s: String)) => (k, "'" + s + "'")
+      case (k, Some(i: Int)) => (k, i.toString)
+      case (k, Some(i: Long)) => (k, i.toString)
+    })//.collect({ case (k, Some(v)) => k -> v })
+  }
 
 }

@@ -15,7 +15,8 @@ object DatabaseWrapper {
   val keyspace = ConfigHandler.getString("cassandra-keyspace")
   val feedTable = "feed"
   val dispatchedFeedTable = "dispatched_feed"
-  val followTable = "follow"
+  val unfollowFilterTable = "unfollow_filter"
+  val followTable = "follow1"
   val startYear = 2015
   val insertName = "insertActivity"
   val deleteName = "deleteActivity"
@@ -32,6 +33,7 @@ object DatabaseWrapper {
     createFeedTable(feedTable)
     createFeedTable(dispatchedFeedTable)
     createFollowTable(followTable)
+    createUnfollowFilterTabe(unfollowFilterTable)
   }
 
   def addPrepareStatements() = {
@@ -73,7 +75,18 @@ object DatabaseWrapper {
     DatabaseConnect.createTable(followTable, fields, partKey, clusterKey, "actor", "asc")
   }
 
-  def putFollow(follower: String, following: String) = {
+  def createUnfollowFilterTabe(unfollowFilterTable: String) = {
+    val fields = Map(
+      "username" -> "text",
+      "unfollowing" -> "text",
+      "published" -> "bigint"
+    )
+    val partKey = Seq("username", "unfollowing")
+    val clusterKey = Seq("published")
+    DatabaseConnect.createTable(unfollowFilterTable, fields, partKey, clusterKey, "published", "desc")
+  }
+
+  def follow(follower: String, following: String) = {
     DatabaseConnect.insert(followTable, Map(
       "username" -> following,
       "follow_type" -> "follower",
@@ -84,7 +97,31 @@ object DatabaseWrapper {
       "follow_type" -> "following",
       "actor" -> following
     ))
+    DatabaseConnect.delete(unfollowFilterTable, Map(
+      "username" -> follower,
+      "unfollowing" -> following
+    ))
   }
+
+  def unfollow(follower: String, following: String) = {
+    DatabaseConnect.delete(followTable, Map(
+      "username" -> following,
+      "follow_type" -> "follower",
+      "actor" -> follower
+    ))
+    DatabaseConnect.delete(followTable, Map(
+      "username" -> follower,
+      "follow_type" -> "following",
+      "actor" -> following
+    ))
+    DatabaseConnect.insert(unfollowFilterTable, Map(
+      "username" -> follower,
+      "unfollowing" -> following,
+      "published" -> DateTime.now().getMillis
+    ))
+  }
+
+
 
 
   def putActivity(username: String, feedname: String, activity: Activity) = {

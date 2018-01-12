@@ -7,11 +7,16 @@ object TestFeed extends App{
 
  // putFollow()
   //Feed.dispatchActivity("sergey", "wowfeed", activity)
-  val ret = DatabaseWrapper.getActivities("user_10", "wowfeed", ActivityContIdStart(), 100)
+  //val ret = DatabaseWrapper.getActivities("user_10", "wowfeed", ActivityContIdStart(), 100)
 
-  println(ret.activities)
+ // println(ret.activities)
 
-  Feed.undispatchActivity("sergey", "wowfeed", ret.activities(0))
+  //Feed.undispatchActivity("sergey", "wowfeed", ret.activities(0))
+
+  Feed.follow("garry", "hermiona")
+
+
+
 
   /*
   ret.activities.foreach({
