@@ -66,7 +66,7 @@ sealed class Stage1ConsumerActorHelper(parent: ActorRef) extends Actor {
   Logger.log.info("Stage1ConsumerActorHelper started")
   parent ! "more"
   def receive = {
-    case containers: ListBuffer[DispatchAddActivityStage1] => {
+    case containers: ListBuffer[DispatchContainerStage1] => {
       Logger.dbg("Stage1ConsumerActorHelper got new chunks: " + containers.size)
       processChunks(containers.toList) {() =>
         parent ! "more"
@@ -74,11 +74,11 @@ sealed class Stage1ConsumerActorHelper(parent: ActorRef) extends Actor {
     }
   }
 
-  def processChunks(stage1Acts: List[DispatchAddActivityStage1]) (done: () => Unit): Unit =
+  def processChunks(stage1Acts: List[DispatchContainerStage1]) (done: () => Unit): Unit =
     stage1Acts match {
       case act :: tail => {
         DatabaseWrapper.mapOverFollowers(act.actor) {followers: Seq[String] =>
-          val cont = DispatchAddActivityStage2(act.actor, act.targetFeed, act.activity, followers)
+          val cont = stage1Stage2Container(act, followers)
           Stage2Producer.send(cont)
         } {
           () => processChunks(tail) (done)
@@ -86,6 +86,12 @@ sealed class Stage1ConsumerActorHelper(parent: ActorRef) extends Actor {
       }
       case Nil =>
         done()
+  }
 
+  private def stage1Stage2Container(c: DispatchContainerStage1, followers: Seq[String]) = c match {
+    case act: DispatchAddActivityStage1 =>
+      DispatchAddActivityStage2(act.actor, act.targetFeed, act.activity, followers)
+    case act: DispatchDeleteActivityStage1 =>
+      DispatchDeleteActivityStage2(act.actor, act.targetFeed, act.activity, followers)
   }
 }

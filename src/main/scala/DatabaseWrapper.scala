@@ -18,6 +18,7 @@ object DatabaseWrapper {
   val followTable = "follow"
   val startYear = 2015
   val insertName = "insertActivity"
+  val deleteName = "deleteActivity"
 
 
   implicit val system = GlobalActorSystem.getActorSystem
@@ -35,7 +36,11 @@ object DatabaseWrapper {
 
   def addPrepareStatements() = {
     val insertActivityFields = List("actor","username","published","year","cluster_key","activity_id","feedname","verb")
-    DatabaseConnect.addPreparedStatement(insertName, dispatchedFeedTable, insertActivityFields)
+    val deleteActivityFields = List("username", "feedname", "year", "cluster_key")
+
+    DatabaseConnect.addPreparedStatementInsert(insertName, dispatchedFeedTable, insertActivityFields)
+    DatabaseConnect.addPreparedStatementDelete(deleteName, dispatchedFeedTable, deleteActivityFields)
+
   }
 
 
@@ -108,7 +113,7 @@ object DatabaseWrapper {
 
   // TODO: Use batch inserts with prepare statements
 
-  def putDispatchableActivitiesAsync(containers: List[DispatchContainerStage2])(onComplete: Try[Done] => Unit) = {
+  def processDispatchableActivitiesAsync(containers: List[DispatchContainerStage2])(onComplete: Try[Done] => Unit) = {
     case class SContainer(follower: String, targetFeed: String, activity: Activity)
     implicit val ex = scala.concurrent.ExecutionContext.Implicits.global
 
@@ -132,7 +137,7 @@ object DatabaseWrapper {
   private def statementByAction(container: DispatchContainerStage2): (String, PreparedStatement) = {
     container match {
       case c: DispatchAddActivityStage2 => (insertName, DatabaseConnect.getPreparedStatement(insertName))
-      case c: DispatchDeleteActivityStage2 => ("deleteActivityTable", DatabaseConnect.getPreparedStatement("deleteActivityTable"))
+      case c: DispatchDeleteActivityStage2 => (deleteName, DatabaseConnect.getPreparedStatement(deleteName))
     }
   }
 
@@ -148,6 +153,13 @@ object DatabaseWrapper {
           c.activity.id,
           c.targetFeed,
           c.activity.verb
+        )
+      case n if n == deleteName =>
+        c.stat.bind(
+          c.follower,
+          c.targetFeed,
+          Long.box(new DateTime(c.activity.published).getYear),
+          getClusterKey(c.activity)
         )
     }
 

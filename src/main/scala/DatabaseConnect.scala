@@ -36,10 +36,22 @@ object DatabaseConnect {
     useKeyspace(keyspace)
   }
 
-  def addPreparedStatement(name: String, table: String, fields: List[String]) = {
+  def addPreparedStatementInsert(name: String, table: String, fields: List[String]) = {
+    val placeholders = List.fill(fields.length)("?").mkString(",")
+    val st = "INSERT INTO " + table + " (" + fields.mkString(",") + ") VALUES (" + placeholders+ ") IF NOT EXISTS"
+    addPreparedStatement(name: String, st: String)
+  }
+
+  def addPreparedStatementDelete(name: String, table: String, pkfields: List[String]) = {
+    val placeholders = pkfields.map(_ + "=?").mkString(" and ")
+    val st = "DELETE FROM " + table + " WHERE " + placeholders
+    addPreparedStatement(name: String, st: String)
+  }
+
+
+  private def addPreparedStatement(name: String, st: String) = {
     prepStatementsMap get name match {
       case None => {
-        val st = insertPrepareStatement(table, fields)
         val preparedStatement = session.prepare(st)
         prepStatementsMap = prepStatementsMap + (name -> preparedStatement)
       }
@@ -139,12 +151,6 @@ object DatabaseConnect {
           f(batch)
         }
       }).runWith(Sink.ignore).onComplete({_: Try[Done] => done()})
-  }
-
-
-  private def insertPrepareStatement(table: String, fields: List[String]): String = {
-    val placeholders = List.fill(fields.length)("?").mkString(",")
-    "INSERT INTO " + table + " (" + fields.mkString(",") + ") VALUES (" + placeholders+ ") IF NOT EXISTS"
   }
 
 

@@ -69,7 +69,7 @@ sealed class Stage2ConsumerActorHelper(parent: ActorRef) extends Actor {
   parent ! "more"
   def receive = {
     case containers: ListBuffer[DispatchContainerStage2] =>
-      DatabaseWrapper.putDispatchableActivitiesAsync(containers.toList) { res: Try[Done] =>
+      DatabaseWrapper.processDispatchableActivitiesAsync(containers.toList) { res: Try[Done] =>
         parent ! "more"
       }
   }

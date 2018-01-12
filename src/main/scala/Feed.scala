@@ -16,6 +16,13 @@ object Feed{
     Stage1Producer.send(item)
   }
 
+  def undispatchActivity(actor: String, feed: String, activity: Activity) = {
+    val item = DispatchDeleteActivityStage1(actor, feed, activity)
+    Stage1Producer.send(item)
+  }
+
+
+
   def putActivity(username: String, feed: String, activity: Activity) = {
     DatabaseWrapper.putActivity(username, feed, activity)
   }

@@ -6,10 +6,20 @@ object TestFeed extends App{
   Feed.init
 
  // putFollow()
-  Feed.dispatchActivity("sergey", "wowfeed", activity)
-  val ret = DatabaseWrapper.getActivities("user_10", "wowfeed", ActivityContIdStart(), 10)
-  println(ret.activities(0).id)
+  //Feed.dispatchActivity("sergey", "wowfeed", activity)
+  val ret = DatabaseWrapper.getActivities("user_10", "wowfeed", ActivityContIdStart(), 100)
 
+  println(ret.activities)
+
+  Feed.undispatchActivity("sergey", "wowfeed", ret.activities(0))
+
+  /*
+  ret.activities.foreach({
+    act: Activity =>
+      Feed.deleteDispatchActivity("sergey", "wowfeed", act)
+  })
+
+*/
 
 
 
